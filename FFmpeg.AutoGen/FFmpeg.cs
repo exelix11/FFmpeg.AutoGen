@@ -5,8 +5,6 @@ using FFmpeg.AutoGen.Native;
 
 namespace FFmpeg.AutoGen
 {
-    public delegate IntPtr GetOrLoadLibrary(string libraryName);
-
     public static partial class ffmpeg
     {
         public static readonly int EAGAIN;
@@ -34,9 +32,9 @@ namespace FFmpeg.AutoGen
 
         static ffmpeg()
         {
-            GetOrLoadLibrary = libraryName => LoadLibrary(libraryName, true);
+            NativeLibraryLoader.SetDllMap();
 
-            switch (LibraryLoader.GetPlatformId())
+            switch (PlatformInfo.GetPlatformId())
             {
                 case PlatformID.MacOSX:
                     EAGAIN = 35;
@@ -52,38 +50,6 @@ namespace FFmpeg.AutoGen
         /// </summary>
         /// <value>The root path.</value>
         public static string RootPath { get; set; } = string.Empty;
-
-        public static GetOrLoadLibrary GetOrLoadLibrary { get; set; }
-
-        private static IntPtr LoadLibrary(string libraryName, bool throwException)
-        {
-            if (LoadedLibraries.TryGetValue(libraryName, out var ptr)) return ptr;
-
-            lock (SyncRoot)
-            {
-                if (LoadedLibraries.TryGetValue(libraryName, out ptr)) return ptr;
-
-                var dependencies = LibraryDependenciesMap[libraryName];
-                dependencies.Where(n => !LoadedLibraries.ContainsKey(n) && !n.Equals(libraryName))
-                    .ToList()
-                    .ForEach(n => LoadLibrary(n, false));
-
-                var version = LibraryVersionMap[libraryName];
-                ptr = LibraryLoader.LoadNativeLibrary(RootPath, libraryName, version);
-
-                if (ptr != IntPtr.Zero) LoadedLibraries.Add(libraryName, ptr);
-                else if (throwException)
-                {
-                    throw new DllNotFoundException(
-                        $"Unable to load DLL '{libraryName}.{version}': The specified module could not be found.");
-                }
-
-                return ptr;
-            }
-        }
-
-        public static T GetFunctionDelegate<T>(IntPtr libraryHandle, string functionName)
-            => FunctionLoader.GetFunctionDelegate<T>(libraryHandle, functionName);
 
         public static ulong UINT64_C<T>(T a)
             => Convert.ToUInt64(a);
